@@ -346,10 +346,12 @@ const STEPS=[
 const blank=()=>({step:0,code:'',name:'',parent:{name:'',email:'',phone:''},consent:false,answers:{},sample:false,sent:false,checked:false});
 let state=blank();
 const STORE='cathkin-pathfinder-v3';
-function save(){try{localStorage.setItem(STORE,JSON.stringify(state))}catch(e){}}
-function load(){try{const s=JSON.parse(localStorage.getItem(STORE)||'null');if(s&&s.answers)state=Object.assign(blank(),s)}catch(e){}}
+/* Answers are kept on this device only until the report is sent; after that nothing is kept, so the next person on the device starts fresh. */
+function save(){try{if(state.sent||state.sample)localStorage.removeItem(STORE);else localStorage.setItem(STORE,JSON.stringify(state))}catch(e){}}
+function load(){try{const s=JSON.parse(localStorage.getItem(STORE)||'null');if(s&&s.answers&&!s.sent&&!s.sample)state=Object.assign(blank(),s)}catch(e){}}
 const app=document.getElementById('app');
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const lc=s=>/^[A-Z][a-z]/.test(s)?s[0].toLowerCase()+s.slice(1):s;
 const first=()=>esc((state.name||'The learner').trim().split(/\s+/)[0]);
 
 function api(body){
@@ -558,7 +560,7 @@ function buildReport(){
     <p class="eyebrow">Grade 9 Pathfinder report · ${esc(d)}</p>
     <h1>${full}</h1>
     <p>${code.map(t=>`<span class="codechip" style="background:${TCOL[t]}">${t}</span>`).join('')}</p>
-    <p class="lead-p">${fn} comes across as <b>${adjText}</b>, with the strongest interests of <b>${TYPES[code[0]].nick}</b> (${TYPES[code[0]].name}), followed by <b>${TYPES[code[1]].nick}</b> and <b>${TYPES[code[2]].nick}</b>. Careers that blend these interests, such as <b>${blend[0].toLowerCase()}</b> or <b>${blend[1].toLowerCase()}</b>, are worth exploring. Recommended support level for Acellus: <b>${support[0]}</b>.</p>
+    <p class="lead-p">${fn} comes across as <b>${adjText}</b>, with the strongest interests of <b>${TYPES[code[0]].nick}</b> (${TYPES[code[0]].name}), followed by <b>${TYPES[code[1]].nick}</b> and <b>${TYPES[code[2]].nick}</b>. Careers that blend these interests, such as <b>${lc(blend[0])}</b> or <b>${lc(blend[1])}</b>, are worth exploring. Recommended support level for Acellus: <b>${support[0]}</b>.</p>
   </div>
 
   <div class="r-sec"><h2>1. Personality style</h2>
