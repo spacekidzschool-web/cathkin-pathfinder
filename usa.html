@@ -96,6 +96,14 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 .send.err{border-color:var(--warn)} .send.err b{color:var(--warn)}
 .sample-flag{display:inline-block;background:var(--gold);color:#0F2440;font-weight:700;font-size:.8rem;padding:3px 10px;border-radius:999px;justify-self:start}
 
+.buy{background:var(--surface);border:2px solid var(--gold);border-radius:14px;padding:18px;display:grid;gap:14px}
+.buy-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.buy-note{color:var(--muted);font-size:.92rem;max-width:46ch;margin-top:4px}
+.buy-price{font-family:var(--display);font-weight:700;font-size:2.4rem;line-height:1;color:var(--ink)}
+#paypalBtns{min-height:50px;max-width:420px}
+details.havecode{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+details.havecode summary{cursor:pointer;font-weight:700;color:var(--accent)}
+details.havecode[open] summary{margin-bottom:12px}
 /* ---- Report (same markup is used for the PDF) ---- */
 .report{display:grid;gap:30px}
 .r-cover{background:var(--soft);border:1px solid var(--line);border-radius:16px;padding:22px;display:grid;gap:10px}
@@ -343,7 +351,7 @@ const STEPS=[
 ];
 
 /* ===================== STATE ===================== */
-const blank=()=>({step:0,code:'',name:'',parent:{name:'',email:'',phone:''},consent:false,answers:{},sample:false,sent:false,checked:false});
+const blank=()=>({step:0,code:'',name:'',parent:{name:'',email:'',phone:''},consent:false,consult:false,answers:{},sample:false,sent:false,checked:false});
 let state=blank();
 const STORE='cathkin-pathfinder-us-v1';
 /* Answers are kept on this device only until the report is sent; after that nothing is kept, so the next person on the device starts fresh. */
@@ -408,6 +416,25 @@ function render(){
 }
 function go(n){state.step=n;save();render();window.scrollTo({top:0})}
 
+/* Paste your PayPal Client ID (live, or sandbox while testing) between the quotes. */
+const PAYPAL_CLIENT_ID='BAAQPV5RBXRk5-UAnDyN6TMSgv7fzBmKJRwb4636cEeojRi6I4mBicx5_E4drcE7YXnfDQ_VdXlL2CLZGU';
+let ppPromise=null;
+function loadPayPal(){
+  if(ppPromise) return ppPromise;
+  ppPromise=new Promise((res,rej)=>{const s=document.createElement('script');
+    s.src='https://www.paypal.com/sdk/js?client-id='+encodeURIComponent(PAYPAL_CLIENT_ID)+'&currency=USD&intent=capture&components=buttons&disable-funding=paylater,venmo,credit';
+    s.onload=()=>window.paypal?res(window.paypal):rej();s.onerror=()=>{ppPromise=null;rej()};document.head.appendChild(s)});
+  return ppPromise;
+}
+function detailsError(){
+  if(!state.name.trim()) return 'Please type the student’s name.';
+  if(!state.parent.name.trim()) return 'Please type the parent or guardian’s name.';
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(state.parent.email)) return 'Please type a valid parent email address.';
+  if(!state.consent) return 'Please check the consent box to continue.';
+  return '';
+}
+function startPaid(code){state.code=code;state.checked=true;state.consult=false;if(state.sample){state.answers={};state.sample=false}state.sent=false;go(1)}
+
 function renderIntro(){
   app.innerHTML=`<section class="step"><header><h2>Welcome</h2>
     <p>The Pathfinder takes about 25 minutes. There are no right or wrong answers, so answer the way you really are. At the end you will see your report on screen, and a full PDF report is emailed to your parent.</p></header>
@@ -418,15 +445,27 @@ function renderIntro(){
       <div class="part"><b>4 · Plans</b><small>4 quick questions about your future</small></div>
     </div>
     <div class="fields">
-      <div class="field"><label for="accessCode">Access code <small>(from your Cathkin Academy purchase)</small></label><input type="text" class="code" id="accessCode" autocomplete="off" spellcheck="false" placeholder="PF-XXXX-XXXX" value="${esc(state.code)}"></div>
       <div class="field"><label for="learnerName">Student's name</label><input type="text" id="learnerName" autocomplete="off" placeholder="First and last name" value="${esc(state.name)}"></div>
       <div class="field"><label for="parentName">Parent or guardian's name</label><input type="text" id="parentName" autocomplete="name" placeholder="First and last name" value="${esc(state.parent.name)}"></div>
-      <div class="field"><label for="parentEmail">Parent's email <small>(the PDF report is sent here)</small></label><input type="email" id="parentEmail" autocomplete="email" placeholder="name@example.com" value="${esc(state.parent.email)}"></div>
+      <div class="field"><label for="parentEmail">Parent's email <small>(the access code and PDF report are sent here)</small></label><input type="email" id="parentEmail" autocomplete="email" placeholder="name@example.com" value="${esc(state.parent.email)}"></div>
       <div class="field"><label for="parentPhone">Parent's phone <small>(optional)</small></label><input type="tel" id="parentPhone" autocomplete="tel" placeholder="(555) 123-4567" value="${esc(state.parent.phone)}"></div>
     </div>
     <label class="consent" for="consentBox"><input type="checkbox" id="consentBox" ${state.consent?'checked':''}><span>I am the student’s parent or legal guardian. I consent to Cathkin Academy using my child’s answers and our contact details to create and email this report, and to keeping a copy on record. Cathkin Academy never sells or shares this information.</span></label>
     <p class="fine">Cathkin Academy is based in South Africa and handles personal information in line with South Africa’s Protection of Personal Information Act (POPIA). To see, correct or delete your information, email cathkinacademy@gmail.com.</p>
-    <div class="nav"><button type="button" class="primary" id="startBtn">Start the Pathfinder</button><button type="button" id="sampleBtn">See a sample report</button><span class="msg" id="msg" role="status"></span></div>
+    <div class="buy">
+      <div class="buy-head">
+        <div><p class="eyebrow">9th Grade Pathfinder Report</p><p class="buy-note" id="priceNote">Online test, on-screen results and full PDF report.</p></div>
+        <p class="buy-price" id="priceVal">$49</p>
+      </div>
+      <div id="paypalBtns"></div>
+      <p class="fine">Secure payment by PayPal or card. The test starts as soon as payment is confirmed, and the access code is also emailed to you.</p>
+    </div>
+    <span class="msg" id="msg" role="status"></span>
+    <details class="havecode"><summary>Already have an access code?</summary>
+      <div class="fields"><div class="field"><label for="accessCode">Access code</label><input type="text" class="code" id="accessCode" autocomplete="off" spellcheck="false" placeholder="PF-XXXX-XXXX" value="${esc(state.code)}"></div></div>
+      <div class="nav"><button type="button" class="primary" id="startBtn">Start with my code</button></div>
+    </details>
+    <div class="nav"><button type="button" id="sampleBtn">See a sample report</button></div>
   </section>`;
   const bind=(id,fn)=>document.getElementById(id).addEventListener('input',e=>{fn(e.target.value);save()});
   bind('accessCode',v=>{state.code=v.trim().toUpperCase();state.checked=false});
@@ -436,21 +475,47 @@ function renderIntro(){
   bind('parentPhone',v=>state.parent.phone=v);
   document.getElementById('consentBox').addEventListener('change',e=>{state.consent=e.target.checked;save()});
   document.getElementById('sampleBtn').onclick=loadSample;
+  const m=document.getElementById('msg');
+  const say=t=>{m.textContent=t;if(t)m.scrollIntoView({behavior:'smooth',block:'center'})};
+
+  // Price
+  if(connected()) api({action:'price',version:'US'}).then(r=>{
+    if(!r||!r.ok) return;
+    document.getElementById('priceVal').textContent='$'+Number(r.price).toFixed(0);
+    if(r.launch) document.getElementById('priceNote').innerHTML=`<b>Launch price</b> for the first 20 families (${r.remaining} left), then $${Number(r.regular).toFixed(0)}. Online test, on-screen results and full PDF report.`;
+  }).catch(()=>{});
+
+  // PayPal buttons
+  const box=document.getElementById('paypalBtns');
+  if(!connected()||/PASTE_/.test(PAYPAL_CLIENT_ID)){box.innerHTML='<p class="fine"><b>Online payment is not open yet.</b> Please email cathkinacademy@gmail.com to buy the Pathfinder.</p>'}
+  else loadPayPal().then(paypal=>paypal.Buttons({
+    style:{layout:'vertical',shape:'rect',label:'pay',height:45},
+    onClick:(data,actions)=>{const e=detailsError();if(e){say(e);return actions.reject()}say('');return actions.resolve()},
+    createOrder:()=>api({action:'pp_create',version:'US'}).then(r=>{if(!r.ok) throw new Error(r.error||'create');return r.id}),
+    onApprove:data=>{say('');m.style.color='var(--ok)';m.textContent='Payment received. Preparing the test…';
+      return api({action:'pp_capture',orderID:data.orderID,learner:state.name.trim(),parentName:state.parent.name.trim(),parentEmail:state.parent.email,parentPhone:state.parent.phone.trim()})
+        .then(r=>{m.style.color='';
+          if(r.ok) return startPaid(r.code);
+          if(r.error==='pending'||r.error==='check') return say('PayPal is still processing your payment. We will email your access code as soon as it clears.');
+          say('We could not confirm your payment. If you were charged, email cathkinacademy@gmail.com with your PayPal receipt and we will send your code straight away.');
+        }).catch(()=>{m.style.color='';say('We could not confirm your payment because the connection dropped. If you were charged, your access code will arrive by email shortly.')});
+    },
+    onError:()=>say('PayPal could not complete the payment. Please refresh the page and try again.')
+  }).render('#paypalBtns')).catch(()=>{box.innerHTML='<p class="fine"><b>PayPal could not load.</b> Check your internet connection and refresh the page, or email cathkinacademy@gmail.com.</p>'});
+
+  // Start with an existing code
   document.getElementById('startBtn').onclick=async()=>{
-    const m=document.getElementById('msg');m.textContent='';
-    if(!/^PF-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(state.code)){m.textContent='Please type your access code, for example PF-7K3M-Q9TD.';return}
-    if(!state.name.trim()){m.textContent='Please type the student’s name.';return}
-    if(!state.parent.name.trim()){m.textContent='Please type the parent or guardian’s name.';return}
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(state.parent.email)){m.textContent='Please type a valid parent email address.';return}
-    if(!state.consent){m.textContent='Please check the consent box to continue.';return}
-    if(!connected()){m.textContent='The Pathfinder is not open yet. Please contact Cathkin Academy.';return}
+    say('');
+    if(!/^PF-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(state.code)){say('Please type your access code, for example PF-7K3M-Q9TD.');return}
+    const e=detailsError();if(e){say(e);return}
+    if(!connected()){say('The Pathfinder is not open yet. Please contact Cathkin Academy.');return}
     const b=document.getElementById('startBtn');b.disabled=true;b.textContent='Checking code…';
     try{
       const r=await api({action:'check',code:state.code});
-      if(r.valid){state.checked=true;if(state.sample){state.answers={};state.sample=false}state.sent=false;go(1)}
-      else{m.textContent=r.reason==='used'?'This access code has already been used. Please contact Cathkin Academy for help.':'We could not find this access code. Please check it and try again.'}
-    }catch(e){m.textContent='We could not check your code. Check your internet connection and try again.'}
-    b.disabled=false;b.textContent='Start the Pathfinder';
+      if(r.valid){state.checked=true;state.consult=!!r.consult;if(state.sample){state.answers={};state.sample=false}state.sent=false;go(1)}
+      else say(r.reason==='used'?'This access code has already been used. Please contact Cathkin Academy for help.':'We could not find this access code. Please check it and try again.');
+    }catch(err){say('We could not check your code. Check your internet connection and try again.')}
+    b.disabled=false;b.textContent='Start with my code';
   };
 }
 
@@ -624,7 +689,7 @@ function buildReport(){
   </div>
 
   <div class="r-sec"><h2>Next steps</h2>
-    <p>Book an online consultation (Zoom or Google Meet) with Cathkin Academy to talk through this report and confirm ${fn}’s 9th-grade courses. Email <b>cathkinacademy@gmail.com</b>.</p>
+    ${state.consult?`<p><b>Your package includes a 45-minute online consultation (Zoom or Google Meet).</b> Email <b>cathkinacademy@gmail.com</b> or WhatsApp <b>+27 64 123 5146</b> to book your session, where we will talk through this report and confirm ${fn}’s 9th-grade courses.</p>`:`<p>Questions about this report? Email <b>cathkinacademy@gmail.com</b>.</p>`}
     <p class="disc">This report is a guidance tool based on the student’s own answers. It is not a psychological or psychometric assessment, and it does not replace professional career counseling. Cathkin Academy is not affiliated with or endorsed by Acellus Academy. Course names and requirements follow the Acellus Academy Honors pathway as published in October 2026 and should be confirmed with Acellus before enrolment.</p>
   </div>`;
 
@@ -647,7 +712,7 @@ function renderResults(){
     <div class="nav"><button type="button" id="newBtn">Start again</button></div>
   </section>`;
   document.getElementById('newBtn').onclick=()=>{state=blank();save();render();window.scrollTo({top:0})};
-  if(state.sample){document.getElementById('sendBox').innerHTML='<p>This is a sample report. Buy an access code from Cathkin Academy to create a report for your child.</p>';return}
+  if(state.sample){document.getElementById('sendBox').innerHTML='<p>This is a sample report. Buy the Pathfinder at the top of this page to create a report for your child.</p>';return}
   sendResults(r);
 }
 function sendResults(r){
